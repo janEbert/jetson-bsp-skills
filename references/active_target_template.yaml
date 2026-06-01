@@ -1,0 +1,16 @@
+# Active target platform — pointer to the currently selected profile in
+# the project-root `target-platform/` directory. Skills read this file
+# to resolve which target the edits apply to.
+#
+# Set `active` to the bare filename (no path) of a sibling file in
+# `target-platform/`, e.g. `jetson-agx-thor-devkit.yaml`. Use `NA` when
+# no target has been selected — skills will then refuse to proceed and
+# prompt the user to pick one.
+#
+# To bootstrap a project: copy this file to
+# `<project-root>/target-platform/active_target.yml`, then either edit
+# `active:` by hand, run `jetson-init-target` (to author a new
+# profile and activate it), or run `jetson-set-target` (to pick from
+# already-authored profiles).
+
+active: NA

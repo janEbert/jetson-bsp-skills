@@ -1,0 +1,316 @@
+# yamllint disable rule:colons rule:line-length rule:comments rule:comments-indentation
+# (Template uses aligned-column key formatting and long inline
+# placeholder descriptions for readability; both trip yamllint's
+# default colons / line-length / comments rules. The file is a
+# reference / documentation artifact, not authored content.)
+# ============================================================================
+# TARGET PLATFORM PROFILE
+# ============================================================================
+# Captures the reference-devkit baseline and (optionally) a custom carrier
+# derived from it, in a single file consumed by every customize-* skill.
+
+# ============================================================================
+# FIELD MARKERS
+# ============================================================================
+# <REQUIRED: …>   Must be provided when the parent block is present.
+#                 `NA` is accepted but downstream skills may refuse.
+# <OPTIONAL: …>   May be skipped. Omitted entirely from the written profile
+#                 (no `NA` placeholder, no empty key).
+# <DERIVED:  …>   Filled by the skill that owns the block. For example,
+#                 jetson-init-target fills reference-devkit facts from
+#                 bsp-platforms-catalogue.md; jetson-init-image fills
+#                 bsp_image.version from the extracted BSP. Not prompted.
+
+# ============================================================================
+# BLOCK-LEVEL INCLUSION
+# ============================================================================
+# reference_devkit  — always present
+# custom_carrier    — only when a custom carrier is recorded
+# bsp_image         — added by jetson-init-image after BSP extraction
+# source            — only when overriding workspace defaults (root_path)
+#                     or providing Linux_for_Tegra / bsp_sources /
+#                     extra repo overrides under `repos:`
+# documents         — only when the user opts in
+
+# ============================================================================
+# WORKSPACE LAYOUT
+# ============================================================================
+# The profile is read in the context of a workspace folder:
+#
+#   workspace/
+#   ├── .claude/         ← context, references, skills
+#   ├── target-platform/ ← this YAML lives here
+#   ├── Image/           ← bsp_image (extracted BSP — contains Linux_for_Tegra/)
+#   ├── Source/          ← shared git clones (overlay + 8 source repos)
+#   └── Documents/       ← reference docs (PDFs, schematics, pinmux)
+#
+# The workspace root is discovered at load time as the parent of the active
+# profile's target-platform/ directory — never recorded in the profile, so
+# the tree stays portable across hosts.
+#
+# Path overrides live INSIDE their owning blocks:
+#   bsp_image.root_path  (default: <workspace>/Image)
+#   source.root_path     (default: <workspace>/Source)
+#   documents.root_path  (default: <workspace>/Documents)
+#
+# Override an individual root_path only when the BSP, sources, or documents
+# need to live elsewhere — e.g. on a shared file share or a different NVMe.
+
+# ============================================================================
+# DERIVATION NOTES
+# ============================================================================
+# bsp_image.version is auto-derived by jetson-init-image from the BSP
+# tarball filename (Jetson_Linux_R<ver>_aarch64.tbz2) or, if the tarball
+# was removed post-extract, from Linux_for_Tegra/nv_tegra_release. The
+# value is a snapshot — re-run jetson-init-image after a new BSP
+# extract to refresh.
+#
+# Read /proc/device-tree/chosen/ids on the actual hardware to confirm
+# module / carrier <ID>-<SKU>. The flash_config picks which SKU-specific
+# files are used during flashing — verify both fields against the chosen
+# .conf before proposing edits.
+
+# ============================================================================
+# SCHEMA
+# ============================================================================
+
+# WHO — identifies the NVIDIA-shipped reference baseline. Always present.
+reference_devkit:
+  name: "<DERIVED: human-readable product name>"
+  module:
+    id:       "<DERIVED: pXXXX from CVM-SKU>"
+    sku:      "<DERIVED: 4-digit SKU string, leading zeros preserved>"
+    revision: "<OPTIONAL: revision expression — product-board-only. One of: (a) a specific product-board tag (e.g. \"100\", \"200\", \"400\", \"a04\") for exactly that fab/revision (read from /proc/device-tree/chosen/ids); (b) a numeric comparison (\">400\", \">=400\", \"<500\", \"<=500\") that matches every product revision whose numeric portion satisfies the comparison; (c) \"Any\" to cover every product revision the BSP carries variants for. INTERNAL TAGS NOT AUTHORABLE — TS*, EB*, ER*, CR* prefixes are pre-production / engineering only and are filtered out at every step. Default is \"Any\" — skills treat an absent / NA / omitted value as \"Any\". When omitted, the entire key is left out of the written profile per the OPTIONAL marker convention.>"
+  carrier:
+    id:       "<DERIVED: pXXXX from CVB-SKU>"
+    sku:      "<DERIVED: 4-digit SKU string, leading zeros preserved>"
+    revision: "<OPTIONAL: revision expression — product-board tag (e.g. \"200\"), numeric comparison (\">400\", \"<=500\", etc.), OR \"Any\" (fan-fork over all product-revision variants). Default is \"Any\" — omitted/NA is treated as \"Any\". Internal TS*/EB*/ER*/CR* tags are not authorable.>"
+  flash_config: "<DERIVED: chosen .conf filename>"
+
+# WHO — identifies the custom carrier when one exists. Optional.
+# (Fill in only when the target is a custom carrier; for a reference
+# devkit, omit this block entirely.)
+custom_carrier:
+  name:         "<REQUIRED: customer-provided custom carrier or product name; preserve exactly as given>"
+  id:           "<REQUIRED: customer-provided custom carrier board ID or project ID; preserve exactly as given; no format is required>"
+  sku:          "<REQUIRED: customer-provided custom carrier SKU or variant identifier; preserve exactly as given; no format is required>"
+  revision:     "<OPTIONAL: customer-provided custom carrier revision or build identifier; preserve exactly as given; omit if unknown>"
+  flash_config: "<REQUIRED: filename ending in .conf>"
+
+# WHERE — BSP image (extracted Linux_for_Tegra). Path defaults to
+# <workspace>/Image; override only when the BSP lives outside the workspace.
+bsp_image:
+  root_path: "<OPTIONAL: absolute path to override the default <workspace>/Image>"
+  version:   "<DERIVED: BSP release string (e.g. 38.4.0)>"
+
+# WHERE — shared source-repo root + optional overrides for the
+# Linux_for_Tegra overlay tracker and the NVIDIA kernel-source
+# baseline. Block only present when overriding any default.
+#
+# Defaults when blocks/fields are omitted:
+#   - source.root_path → <workspace>/Source
+#   - source.toolchain → DERIVED by jetson-init-source via the
+#                        resolution ladder: (1) auto-discover at
+#                        <workspace>/toolchain/x-tools/aarch64-*-linux-gnu/bin/<triple>-gcc;
+#                        (2) auto-extract <workspace>/Downloads/x-tools.tbz2
+#                        if present (mirrors the public_sources.tbz2
+#                        Branch-A pattern below); (3) prompt user
+#                        for an absolute path. jetson-download-bsp
+#                        owns network fetches of x-tools.tbz2.
+#                        jetson-build-source consumes the
+#                        recorded prefix as CROSS_COMPILE; never
+#                        silently substitutes an alternate aarch64
+#                        cross-toolchain.
+#   - Linux_for_Tegra  → if `repos.Linux_for_Tegra` is omitted (or
+#                        carries no url), jetson-init-source `git init`s an
+#                        empty repo at <source.root_path>/Linux_for_Tegra/.
+#   - bsp_sources → jetson-init-source dispatches in precedence order:
+#                        1. If `repos.bsp_sources.url:` is set →
+#                           Branch C (customer git clone — explicit
+#                           override always wins).
+#                        2. Otherwise, if `repos.bsp_sources.archive:`
+#                           is set, OR the entry is omitted AND a
+#                           local `<workspace>/Downloads/public_sources.tbz2`
+#                           exists → Branch A (extract the local
+#                           archive; default). This sidesteps git
+#                           egress entirely and is the recommended
+#                           path whenever `/quick-start` has populated
+#                           Downloads/.
+#                        3. Otherwise → Branch B (source_sync.sh
+#                           against bsp_image.version; fallback when
+#                           no archive is available).
+#
+# Three branches selected by `repos.bsp_sources` shape:
+#
+#   A. `archive:` set, OR entry      → extract a pre-downloaded
+#      omitted AND a local             public_sources.tbz2 (path is
+#      Downloads/public_sources.tbz2   resolved absolute or relative
+#      exists                          to <workspace>/) into a single
+#                                      mono-repo at <source.root_path>/
+#                                      bsp_sources/. One `git init` +
+#                                      initial pristine commit covers
+#                                      the entire tree (canonical
+#                                      sub-paths + top-level glue
+#                                      scripts). No git egress
+#                                      required. **Default.**
+#   B. Entry omitted AND no local    → source_sync.sh against
+#      archive                         bsp_image.version. **Fallback**;
+#                                      requires git egress to NVIDIA
+#                                      upstream.
+#   C. `url:` set                    → customer git clone; the repo
+#                                      internally holds ALL kernel-side
+#                                      trees at the source_sync.sh
+#                                      canonical sub-paths (kernel/
+#                                      kernel-noble, nvidia-oot, nvgpu,
+#                                      nvethernetrm, nvdisplay, hwpm,
+#                                      hardware/nvidia/{tegra,t23x,
+#                                      t264}/nv-public). `subdir:`
+#                                      shifts that layout under a
+#                                      sub-root inside the clone if the
+#                                      customer's repo nests it.
+#
+# `url:` and `archive:` are mutually exclusive — setting both is a
+# profile error.
+#
+# Mount layout for `bsp_sources:` is FIXED to the source_sync.sh
+# canonical sub-paths under <source.root_path>/bsp_sources/ (e.g.
+# <source.root_path>/bsp_sources/kernel/kernel-noble/,
+# <source.root_path>/bsp_sources/nvidia-oot/, etc.) — the on-disk
+# folder matches the schema key. For the default branch this is
+# achieved via `source_sync.sh -d <source.root_path>/bsp_sources`;
+# for an override branch the `bsp_sources:` clone itself is placed
+# in a side directory and each canonical sub-path is symlinked to its
+# mount under <source.root_path>/bsp_sources/. `path:` does NOT
+# apply to the `bsp_sources:` entry (or to `Linux_for_Tegra:`);
+# only extra user-defined entries use `path:`.
+#
+# Multi-repo customer setups (separate forks per kernel-side tree
+# rather than a single repo): leave `bsp_sources:` omitted so
+# source_sync.sh provides the NVIDIA upstream baseline, and list
+# each override as a regular `<user-chosen-name>:` entry under
+# `repos:` with `path:` set to the canonical source_sync.sh
+# sub-path (e.g. `path: bsp_sources/kernel/kernel-noble`).
+# Per-repo overrides layer on top of source_sync.sh defaults; the
+# path-collision rule lets the user's entry win.
+source:
+  root_path: "<OPTIONAL: absolute path to override the default <workspace>/Source>"
+
+  toolchain: "<DERIVED: absolute path to NVIDIA Crosstool-NG cross-compile prefix, INCLUDING the trailing dash (e.g. /opt/nvidia/workspace/toolchain/x-tools/aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-). Authored by jetson-init-source via the resolution ladder above; consumed by jetson-build-source as CROSS_COMPILE. Required for any kernel/OOT/DT build. Refuse if missing or if ${toolchain}gcc does not exist on disk.>"
+
+  repos:
+    Linux_for_Tegra:    # <DERIVED: overlay tracker. Defaults to a fresh `git init` empty repo at <source.root_path>/Linux_for_Tegra/. Override only when a customer repo holds the overlay.>
+      url:    "<OPTIONAL: git URL>"
+      ref:    "<OPTIONAL: branch or tag>"
+      subdir: "<OPTIONAL: path inside the clone where the overlay tree lives (default: repo root)>"
+
+    bsp_sources: # <DERIVED: BSP-sources baseline (kernel + OOT drivers + GPU/display kernel modules + perf monitor + device trees). Three branches, dispatched in precedence order: (A) `archive:` set, OR entry omitted AND <workspace>/Downloads/public_sources.tbz2 exists → extract local archive (DEFAULT); (B) entry omitted AND no local archive → source_sync.sh against bsp_image.version (FALLBACK); (C) `url:` set → customer git clone (explicit override always wins). Mounts at the source_sync.sh canonical sub-paths under <source.root_path>/bsp_sources/ — `path:` does NOT apply. `url:` and `archive:` are mutually exclusive.>
+      archive: "<OPTIONAL: path to a pre-downloaded public_sources.tbz2 (Branch A — default). Absolute, or relative to <workspace>/ (e.g. Downloads/public_sources.tbz2). Omit to auto-discover at <workspace>/Downloads/public_sources.tbz2.>"
+      url:     "<OPTIONAL: git URL of the customer kernel-source repo (Branch C — explicit override)>"
+      ref:     "<OPTIONAL: branch or tag (Branch C, and Branch A as informational metadata)>"
+      subdir:  "<OPTIONAL: sub-root inside the Branch C clone where the canonical kernel-side layout starts (default: repo root)>"
+
+    <user-chosen-name>: # <OPTIONAL: additional user-defined source repo cloned alongside the kernel baseline>
+      url:    "<REQUIRED: git URL>"
+      ref:    "<OPTIONAL: branch or tag>"
+      subdir: "<OPTIONAL: path inside the clone (default: repo root)>"
+      path:   "<OPTIONAL: mount path under <source.root_path> (default: <name>)>"
+    # ... add as many extra entries as needed
+
+# WHAT — reference documents. Optional; opt-in via jetson-link-docs.
+# All fields below are paths RELATIVE to <documents.root_path>/.
+# Subfolders allowed: e.g. "BSP/Jetson-Linux-Developer-Guide.pdf".
+# jetson-link-docs records user-confirmed document bindings.
+documents:
+  root_path:                   "<OPTIONAL: absolute path to override the default <workspace>/Documents>"
+  bsp_developer_guide:         "<OPTIONAL: BSP / Jetson Linux developer guide>"
+  bsp_user_guide:              "<OPTIONAL: BSP / Jetson Linux user guide (e.g. devkit quick-start / user guide)>"
+  soc_tech_ref_manual:         "<OPTIONAL: Tegra SoC Technical Reference Manual>"
+  module_data_sheet:           "<OPTIONAL: Jetson module data sheet>"
+  module_design_guide:         "<OPTIONAL: Jetson module design guide (a.k.a. Product Design Guide / PDG)>"
+  module_thermal_design_guide: "<OPTIONAL: Jetson module thermal design guide (a.k.a. TDG)>"
+  carrier_board_spec:          "<OPTIONAL: reference carrier board specification>"
+  carrier_schematic:           "<OPTIONAL: reference carrier schematic>"
+  custom_carrier_schematic:    "<OPTIONAL: custom carrier schematic — only when custom_carrier is added>"
+  ref_devkit_pinmux_xls:       "<OPTIONAL: reference-devkit pinmux spreadsheet (.xls / .xlsx)>"
+  custom_carrier_pinmux_xls:   "<OPTIONAL: custom-carrier pinmux spreadsheet — only when custom_carrier is added>"
+
+# ============================================================================
+# CONCRETE EXAMPLE (illustrative — not loaded; for reference only)
+# ============================================================================
+#
+# Minimal profile — workspace-default paths, reference devkit only:
+#
+#   reference_devkit:
+#     name: Jetson Orin Nano 8GB
+#     module:  { id: p3767, sku: "0003" }
+#     carrier: { id: p3768, sku: "0000" }
+#     flash_config: jetson-orin-nano-devkit.conf
+#   bsp_image:
+#     version: "38.4.0"          # auto-derived
+#
+# With custom carrier + path overrides (no repo overrides — source.repos
+# omitted, so jetson-init-source git-inits empty Linux_for_Tegra/ and runs
+# source_sync.sh for the kernel baseline):
+#
+#   reference_devkit:
+#     name: Jetson AGX Thor T5000 Developer Kit
+#     module:  { id: p3834, sku: "0008" }
+#     carrier: { id: p4071, sku: "0000" }
+#     flash_config: jetson-agx-thor-devkit.conf
+#   custom_carrier:
+#     name: Acme Vision X1
+#     id: p9001
+#     sku: "0001"
+#     flash_config: acme-vision-x1.conf
+#   bsp_image:
+#     root_path: /opt/nvidia/Image
+#     version: "36.4.3"
+#   source:
+#     root_path: /opt/nvidia/Source
+#   documents:
+#     root_path: /opt/nvidia/Documents
+#     bsp_developer_guide: BSP/Jetson-Linux-Developer-Guide.pdf
+#     carrier_schematic:   Orin/Schematics/P3768-Carrier.pdf
+#
+# With customer kernel repo + custom overlay + extra repo (Branch C):
+#
+#   reference_devkit:
+#     name: Jetson AGX Thor T5000
+#     module:  { id: p3834, sku: "0008" }
+#     carrier: { id: p4071, sku: "0000" }
+#     flash_config: jetson-agx-thor-devkit.conf
+#   bsp_image:
+#     version: "38.4.0"
+#   source:
+#     repos:
+#       Linux_for_Tegra:
+#         url:    git@github.com:acme/customer-overlay.git
+#         ref:    main
+#       bsp_sources:
+#         url:    git@github.com:acme/customer-bsp.git
+#         ref:    acme/r38.4-stable
+#         subdir: kernel-tree   # canonical kernel-side layout lives here
+#       acme-platform-tools:
+#         url:  git@github.com:acme/platform-tools.git
+#         ref:  v2.1.0
+#         path: tools/acme-platform-tools
+#
+# With local archive extraction (Branch A — default; air-gapped / no git egress):
+#
+#   reference_devkit:
+#     name: Jetson AGX Thor T5000
+#     module:  { id: p3834, sku: "0008" }
+#     carrier: { id: p4071, sku: "0000" }
+#     flash_config: jetson-agx-thor-devkit.conf
+#   bsp_image:
+#     version: "38.4.0"
+#   source:
+#     # toolchain field is DERIVED — written automatically by
+#     # jetson-init-source after auto-discovery / extraction / user path:
+#     toolchain: /opt/nvidia/workspace/toolchain/x-tools/aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-
+#     repos:
+#       bsp_sources:
+#         archive: Downloads/public_sources.tbz2   # rel. to <workspace>/
+#         # ref: 38.4.0  # OPTIONAL informational — not used by extract
+#
+# (Linux_for_Tegra omitted → jetson-init-source git-inits empty.)
