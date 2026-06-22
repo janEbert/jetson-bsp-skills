@@ -61,7 +61,7 @@ dut_access:
 
   # Writable scratch directory on the DUT for pushed test scripts
   # and collected artifacts. Created if missing on first connect.
-  workdir:   "<OPTIONAL: absolute path on DUT — default /home/<ssh.user>/jetson-validate>"
+  workdir:   "<OPTIONAL: absolute path on DUT — default $HOME/jetson-validate>"
 ```
 
 `auth: prompt` and `sudo.method: prompt` mean "ask the user at

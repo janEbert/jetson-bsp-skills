@@ -83,7 +83,7 @@ Rootfs:          populated | empty
 Example output on an Orin AGX BSP (L4T R36):
 
 ```text
-L4T root:        /home/dev/jetson/Linux_for_Tegra
+L4T root:        $HOME/Linux_for_Tegra
 L4T release:     # R36 (release), REVISION: 3.0
 Board configs:   jetson-agx-orin-devkit.conf,jetson-orin-nano-devkit.conf
 Rootfs:          populated
