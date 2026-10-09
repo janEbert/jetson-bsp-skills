@@ -4,9 +4,11 @@ description: >-
   Use when you need to rebuild the BSP overlay — DT, OOT modules,
   or kernel — from changes under bsp_sources/. Triggers: build
   bsp, rebuild dtb, rebuild kernel.
+  The user may optionally supply one of "dt", "oot", "kernel", or
+  "full" to select a build mode; if omitted, the build scope is
+  derived from the dirty repositories.
 version: 0.0.1
 license: "Apache-2.0"
-argument-hint: "dt | oot | kernel | full"
 metadata:
   data-classification: public
   author: "Jetson Team"

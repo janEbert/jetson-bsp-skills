@@ -4,10 +4,11 @@ description: >-
   Reclaim DRAM by disabling unused subsystems across MB1 BCT, MB2 BCT,
   kernel reserved-memory, and SWIOTLB. Use for headless or no-camera
   Jetson deployments; not for CPU/GPU frequency tuning.
+  The user may optionally specify "headless", "no-camera", or
+  "swiotlb" to select the reclamation recipe to apply.
 
 version: 0.0.1
 license: "Apache-2.0"
-argument-hint: "headless | no-camera | swiotlb"
 metadata:
   data-classification: public
   author: "Jetson Team"
